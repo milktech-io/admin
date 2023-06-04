@@ -1,0 +1,342 @@
+import {  Stack, Button, Input } from '@chakra-ui/react'
+import React, {useState, useEffect} from 'react'
+import moment from 'moment';
+
+export const MultipliersTest = () => {
+
+
+      const [balances,setBalances] = useState([]);
+      const [plan, setPlan] = useState({});
+      const [fechas, setFechas] = useState('1|15');
+      const [retiros, setRetiros] = useState([]);
+      const [retiro, setRetiro] = useState(0);
+      const [invitado, setInvitado] = useState(1500);
+      const [months, setMonths] = useState(20);
+      const [porcentaje, setPorcentaje] = useState(0.0278);
+      const [interes, setInteres] = useState(1);
+      const [price, setPrice] = useState(1500);
+      const [today, setToday] = useState(moment());
+
+
+      const [simulating, setSimulating] = useState(false);
+
+
+      const createPlan =()=>{
+
+        if(price<=0)
+          return;
+
+        let endDate = (moment(today))
+        endDate.set('month',today.month()+ months);
+        setPlan({
+          price,
+          date:today,
+          endDate,
+          active:1,
+          automatically_ends:price*3,
+          interes,
+          porcentaje
+        })
+
+        let newBalance ={
+          balance:0,
+          aporte:0,
+          ganancia_al_dia:0,
+          invitacion:0,
+          date:today,
+          months:0,
+          rendimiento:0,
+          porcentaje
+        }
+
+        setBalances([
+          ...balances,
+          newBalance
+          ])
+      }
+
+      const handlePorcentaje = (e)=>{
+        setPorcentaje(parseFloat(e.target.value));
+      }
+
+
+      const handleRetiro = (e)=>{
+        setRetiro(parseFloat(e.target.value));
+      }
+
+      const handleReglaFechas = (e)=>{
+        setFechas((e.target.value));
+      }
+
+      const handlePrice = (e)=>{
+        setPrice(parseFloat(e.target.value));
+      }
+      const handleMonths = (e)=>{
+        setMonths(parseFloat(e.target.value));
+      }
+
+      const handleInteres = (e)=>{
+        if(e.target.vale.trim()==='')
+          return;
+        setInteres(parseFloat(e.target.value));
+      }
+
+
+      const handleDate = (e)=>{
+        setToday(moment(e.target.value));
+      }
+
+      const handleInvitar = (e)=>{
+        setInvitado((e.target.value));
+      }
+      const parseFechas =()=>{
+        return fechas.split('|').filter(f=>f.length).map(d=>parseFloat(d));
+      }
+      useEffect(()=>{
+
+        if(!simulating)
+          return;
+
+
+        let lastbalance = balances[balances.length-1]
+
+        let minDays = retiros.length? 0:5;
+
+        if(checkToday(today.date()) && plan.active && (daysDiff(lastbalance.date,today)>minDays )){
+          
+          let _porcentaje = lastbalance.porcentaje;
+
+          
+          let journaly = 28/ parseFechas().length;
+
+          let diasTranscurridos = daysDiff(lastbalance.date,today);
+
+          if(diasTranscurridos<journaly && lastbalance.date === plan.today) //prorrateo
+          {
+            _porcentaje = parseFloat((diasTranscurridos * _porcentaje / journaly).toFixed(4));
+          }
+
+
+
+          let aporte =0;
+          if(plan.interes){
+            aporte=parseFloat(((plan.price + lastbalance.balance) * (_porcentaje)).toFixed(4));
+          } else {
+            aporte=parseFloat((plan.price * (_porcentaje)).toFixed(4));
+          }
+
+
+          let completado = false;
+
+
+          if(lastbalance.ganancia_al_dia + aporte >= plan.automatically_ends ){
+            let ganancia=plan.automatically_ends;
+            aporte = plan.automatically_ends- lastbalance.ganancia_al_dia;
+            completado=true;
+            return ganancia;
+          }
+
+          let ganancia_al_dia = parseFloat((lastbalance.ganancia_al_dia + aporte).toFixed(4))
+          let balance = parseFloat((lastbalance.balance + aporte).toFixed(4));
+
+
+          let newBalance={
+            ...lastbalance,
+            balance,
+            aporte,
+            ganancia_al_dia ,
+            date:today,
+            invitacion:0,
+            rendimiento:parseFloat((balance-plan.price).toFixed(4)),
+            retiro:false,
+          }
+
+
+          let mesesTranscurridos = monthDiff(plan.date,today);
+     
+          if(mesesTranscurridos === months && retiros.length>0){
+          //  completado=true;
+          }
+
+
+          if(completado)
+          {
+            setPlan({
+              ...plan,
+              active:0
+            })
+            setSimulating(false);
+          }
+
+          setBalances([
+            ...balances,
+            newBalance
+          ])
+
+
+        } 
+
+        setTimeout(()=>{
+          changeTomorrow()
+        }, [10])
+
+
+
+
+      },[today,simulating, balances, changeTomorrow, checkToday, months, parseFechas, plan, retiros])
+
+
+      const changeTomorrow =()=>{
+
+        let tomorrowDate = moment(today);
+        tomorrowDate.set('date',today.date()+1);
+        setToday(tomorrowDate)
+      }
+
+
+      const checkToday=(day)=>{
+        let days =parseFechas();
+        return days.includes(day);
+      }
+
+
+      const crearRetiro=()=>{
+        if(retiro<1)
+          return;
+
+        let newRetiro={
+          date:today,
+          cantidad:retiro
+        };
+
+
+        let lastbalance = balances.at(-1);
+        let newBalance={
+          ...lastbalance,
+          balance:lastbalance.balance-retiro,
+          aporte:0-retiro,
+          invitacion:0,
+          rendimiento:lastbalance.balance-retiro -plan.price,
+          date:today,
+          retiro:true
+        }
+
+        if(newBalance.balance<=0)
+          setPlan({
+            ...plan,
+            active:0,
+          })
+
+        setRetiros([
+          ...retiros,
+          newRetiro
+        ])
+
+        setBalances([
+          ...balances,
+          newBalance
+        ])
+      }
+
+
+
+      const monthDiff=(d1, d2) =>{ 
+        return Math.abs(d1.diff(d2, 'months'));
+
+      }
+
+
+      const daysDiff=(d1, d2) =>{ 
+        var diffDays = parseInt((d1 - d2) / (1000 * 60 * 60 * 24), 10); 
+        return Math.abs(diffDays);
+      }
+
+      const generarRecompensa  = (e)=>{
+
+        let precio =invitado/10; //10%
+        let lastbalance = balances.at(-1);
+
+        console.log(lastbalance.ganancia_al_dia,precio);
+        let newBalance={
+          ...lastbalance,
+          aporte:0,
+          invitacion:precio,
+          ganancia_al_dia: parseFloat((lastbalance.ganancia_al_dia+ precio).toFixed(4)),
+          retiro:false
+        }
+
+         setBalances([
+          ...balances,
+          newBalance
+        ])
+
+
+      }
+
+     return (
+        <Stack  style={{ display: "flex", flexDirection: "column" }} bg={"white"}>         
+
+
+          <p><b>Hoy  es</b> {today.format('YYYY-MM-D')}   <Input style={{width:'200px'}} type="date"  placeholder="regla fechas" onChange={handleDate}/> <br/></p>
+          <p><b>Plan inicio</b> {plan.date?.format('YYYY-MM-D')}  </p>
+          <p><b>Plan fin</b> {plan.endDate?.format('YYYY-MM-D')}  </p>
+          <p><b>Se espera</b> {plan.automatically_ends} <br/></p>
+          <p><b>Plan activo</b> {plan.active?'Si':'No'} <br/></p>
+          <p><b>Interes compuesto</b> {plan.interes?'Si':'No'} <br/></p>
+          <p><b>Simulacion</b> {simulating?'Si':'No'}      <Button disabled={!plan.price} onClick={()=>setSimulating(!simulating)}>{simulating?'Detener simulacion':'Comenzar simulacion'}</Button></p>
+
+          <h2> Compra de paquete</h2>
+          <Input disabled={plan.price} value={fechas} placeholder="regla fechas" onChange={handleReglaFechas}/>
+          <Input disabled={plan.price} value={months} placeholder="meses" onChange={handleMonths}/>
+          <Input disabled={plan.price} type='number' placeholder="porcentaje" value={porcentaje} onChange={handlePorcentaje}/>
+          <Input disabled={plan.price} type='number' placeholder="interes compuesto" value={interes} onChange={handleInteres}/>
+          <Input disabled={plan.price} type='number' placeholder="Precio multiplicador" value={price} onChange={handlePrice}/>        
+          <Button  disabled={plan.price} onClick={createPlan}>Comprar</Button>
+
+          <h2> Retiro de saldo</h2>
+          <Input disabled={!plan.price} type='number' placeholder="Precio multiplicador" value={retiro} onChange={handleRetiro}/>        
+          <Button  disabled={!plan.price} onClick={crearRetiro}>Retirar</Button>
+
+          <h2> Paquete invitado</h2>
+          <Input disabled={!plan.price} type='number' value={invitado} onChange={handleInvitar}placeholder="paquete invitado" />        
+          <Button  disabled={!plan.price} onClick={generarRecompensa}>invitar</Button>
+
+
+          <table>
+            <thead>
+            <tr>
+              <th></th>
+              <th>Cantidad</th>
+              <th>Aporte</th>
+              <th>invitacion</th>
+              <th>ganancia al dia</th>
+              <th>Rendimiento</th>
+              <th>Meses transcurridos</th>
+              <th>Fecha</th>
+            </tr>
+              </thead>
+            <tbody>
+            {
+              balances.reverse().map((b,index)=>
+              <tr style={b.retiro ?{color:'red'}:{}} key={index+b.date.format('YYYY-MM-D').replaceAll(' ','_')+b.balance}>
+                <td>{!b.retiro? '+':'-' }</td>
+                <td>{b.balance}  </td>
+                <td>{b.aporte}  </td>
+                <td>{b.invitacion}  </td>
+                <td>{b.ganancia_al_dia}  </td>
+                <td>{(b.ganancia_al_dia - plan.price).toFixed(4)}  </td>
+                <td>{monthDiff(plan.date,b.date)}</td>
+                <td>{b.date.format('YYYY-MM-D')}</td>
+              </tr>)
+          }
+
+
+            </tbody>
+          </table>
+
+           
+        </Stack>
+
+      
+    )
+}
